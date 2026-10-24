@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #0b0f12;
+    --bg-surface: #141a1f;
+    --bg-card: #1a2228;
+    --border-color: #27323a;
+    --border-hover: #36444f;
+
+    --primary: #6b8f3c;
+    --primary-hover: #5a7a32;
+    --primary-light: rgba(107, 143, 60, 0.15);
+
+    --accent-amber: #c49a5c;
+    --accent-amber-light: rgba(196, 154, 92, 0.15);
+
+    --status-success: #5fa87a;
+    --status-warning: #c47a4a;
+    --status-error: #b85454;
+    --status-info: #5a8ea8;
+
+    --text-main: #ede9e3;
+    --text-muted: #8a96a0;
+    --text-subtle: #56636d;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family:
+      var(--font-geist-sans),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d1216;
+}
+::-webkit-scrollbar-thumb {
+  background: #25313a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #384854;
+}
+
+@layer components {
+  /* Glass panel & cards */
+  .glass-panel {
+    background: rgba(22, 29, 34, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-card {
+    background: rgba(26, 34, 40, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 1rem;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    border-color: rgba(107, 143, 60, 0.35);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Form Elements */
+  .input-field {
+    background-color: #12181d;
+    border: 1px solid #28333c;
+    color: #ede9e3;
+    border-radius: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .input-field:focus {
+    border-color: #6b8f3c;
+    box-shadow: 0 0 0 3px rgba(107, 143, 60, 0.2);
+  }
+
+  .input-field::placeholder {
+    color: #56636d;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background-color: #6b8f3c;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    background-color: #5a7a32;
+    box-shadow: 0 4px 14px rgba(107, 143, 60, 0.35);
+  }
+
+  .btn-secondary {
+    background-color: #212c34;
+    color: #ede9e3;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 1px solid #313e48;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .btn-secondary:hover {
+    background-color: #2b3944;
+    border-color: #41525f;
+  }
+
+  .btn-amber {
+    background-color: #c49a5c;
+    color: #12181d;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-amber:hover {
+    background-color: #b3894b;
+    box-shadow: 0 4px 14px rgba(196, 154, 92, 0.35);
+  }
+
+  /* Badges */
+  .badge {
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .badge-success {
+    background: rgba(95, 168, 122, 0.15);
+    color: #5fa87a;
+    border: 1px solid rgba(95, 168, 122, 0.3);
+  }
+
+  .badge-warning {
+    background: rgba(196, 122, 74, 0.15);
+    color: #c47a4a;
+    border: 1px solid rgba(196, 122, 74, 0.3);
+  }
+
+  .badge-amber {
+    background: rgba(196, 154, 92, 0.15);
+    color: #c49a5c;
+    border: 1px solid rgba(196, 154, 92, 0.3);
+  }
+
+  .badge-primary {
+    background: rgba(107, 143, 60, 0.15);
+    color: #8bb552;
+    border: 1px solid rgba(107, 143, 60, 0.3);
+  }
+
+  .badge-danger {
+    background: rgba(184, 84, 84, 0.15);
+    color: #b85454;
+    border: 1px solid rgba(184, 84, 84, 0.3);
+  }
+
+  /* Modal styling */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 10, 12, 0.8);
+    backdrop-filter: blur(8px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .modal-content {
+    background: #161d22;
+    border: 1px solid #2b3741;
+    border-radius: 1.25rem;
+    width: 100%;
+    max-width: 32rem;
+    padding: 1.5rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Custom Animation Utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media print {
+  /* Hide application chrome */
+  .app-header,
+  .app-sidebar,
+  header,
+  aside,
+  nav {
+    display: none !important;
+  }
+
+  /* Hide anything explicitly marked as non-printable */
+  .print-hidden,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Remove the application's layout spacing */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Make report occupy the whole printable area */
+  #reports-module-root {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #official-audit-document {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}

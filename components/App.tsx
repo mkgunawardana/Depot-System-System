@@ -1,0 +1,1656 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  Building,
+  Bus,
+  Calendar,
+  Cog,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  RefreshCw,
+  Sun,
+  Unlock,
+  UserCheck,
+  Users,
+  Zap,
+} from "lucide-react";
+import {
+  createDriver,
+  deleteDriver,
+  getDrivers,
+  updateDriver,
+} from "@/lib/api/drivers";
+import {
+  getDepots,
+  createDepot,
+  updateDepot,
+  deleteDepot,
+} from "@/lib/api/depots";
+import {
+  createVehicle,
+  deleteVehicle,
+  getVehicles,
+  updateVehicle,
+} from "@/lib/api/vehicles";
+import {
+  createRoute,
+  deleteRoute,
+  getRoutes,
+  updateRoute,
+} from "@/lib/api/routes";
+import {
+  createSchedule,
+  deleteSchedule,
+  getSchedules,
+  updateSchedule,
+} from "@/lib/api/schedules";
+import Dashboard from "./Dashboard";
+import DriversModule from "./DriversModule";
+import OperationsModules from "./OperationsModules";
+import ReportsModule from "./ReportsModule";
+import RoutesModule from "./RoutesModule";
+import SchedulesModule from "./SchedulesModule";
+import VehiclesModule from "./VehiclesModule";
+import UserManagement from "./UserManagement";
+import { User } from "./type";
+import type {
+  Driver,
+  FuelLog,
+  MaintenanceRecord,
+  Route,
+  Schedule,
+  Trip,
+  Vehicle,
+  Depot,
+} from "../type";
+import DepotManagement from "./DepotManagement";
+
+type AppRole =
+  | "MAIN_ADMIN"
+  | "DEPOT_ADMIN"
+  | "SUPERVISOR"
+  | "OPERATIONAL_STAFF";
+const permissions: Record<AppRole, readonly string[]> = {
+  MAIN_ADMIN: [
+    "dashboard",
+    "users",
+    "depots",
+    "routes",
+    "drivers",
+    "vehicles",
+    "schedules",
+    "operations",
+    "reports",
+    //  "settings",
+  ],
+  DEPOT_ADMIN: [
+    "dashboard",
+
+    "routes",
+    "drivers",
+    "vehicles",
+    "schedules",
+    "operations",
+    "reports",
+  ],
+  SUPERVISOR: ["dashboard", "schedules", "operations", "reports"],
+  OPERATIONAL_STAFF: ["operations", "schedules"],
+};
+type AuthTab = "login" | "register";
+type Theme = "light" | "dark";
+type AppTab =
+  | "dashboard"
+  | "routes"
+  | "drivers"
+  | "vehicles"
+  | "schedules"
+  | "operations"
+  | "reports"
+  | "depots"
+  | "users"
+  | "settings";
+
+type AuthUser = {
+  id: number;
+  full_name: string;
+  email: string;
+  username: string;
+  role: AppRole;
+  depot_id: number | null;
+};
+
+const initialRoutes: Route[] = [
+  {
+    route_id: "route_1",
+    route_name: "Fort to Maharagama",
+    start_location: "Fort Central Junction",
+    end_location: "Maharagama Terminal",
+    stops: ["Borella Junction", "Nugegoda Point"],
+    distance: 18.4,
+    estimated_duration: 42,
+    status: "Active",
+  },
+  {
+    route_id: "route_2",
+    route_name: "Pettah to Panadura",
+    start_location: "Pettah Central Bus Stand",
+    end_location: "Panadura Central Depot",
+    stops: ["Wellawatte Station", "Ratmalana Airport Corner"],
+    distance: 33.1,
+    estimated_duration: 65,
+    status: "Active",
+  },
+];
+
+const initialVehicles: Vehicle[] = [
+  {
+    vehicle_id: "vehicle_1",
+    registration_number: "NB-1024",
+    vehicle_type: "Single Decker",
+    seating_capacity: 45,
+    mileage: 54000,
+    fuel_type: "Diesel",
+    status: "Available",
+  },
+  {
+    vehicle_id: "vehicle_2",
+    registration_number: "NB-2048",
+    vehicle_type: "Double Decker",
+    seating_capacity: 72,
+    mileage: 68000,
+    fuel_type: "Hybrid",
+    status: "On Trip",
+  },
+];
+
+const initialSchedules: Schedule[] = [
+  {
+    schedule_id: "schedule_1",
+    route_id: "route_1",
+    vehicle_id: "vehicle_1",
+    driver_id: "driver_1",
+    departure_time: "08:00",
+    arrival_time: "08:42",
+    schedule_date: "2026-08-05",
+    status: "Scheduled",
+  },
+  {
+    schedule_id: "schedule_2",
+    route_id: "route_2",
+    vehicle_id: "vehicle_2",
+    driver_id: "driver_2",
+    departure_time: "09:15",
+    arrival_time: "10:20",
+    schedule_date: "2026-08-05",
+    status: "Active",
+  },
+];
+
+const initialTrips: Trip[] = [
+  {
+    trip_id: "trip_1",
+    schedule_id: "schedule_2",
+    start_time: "2026-08-05T09:15:00",
+    end_time: "",
+    status: "Active",
+  },
+];
+
+const initialFuelLogs: FuelLog[] = [
+  {
+    fuel_id: "fuel_1",
+    vehicle_id: "vehicle_2",
+    date: "2026-08-04",
+    liters: 68,
+    cost: 13200,
+    distance_covered: 390,
+  },
+];
+
+const initialMaintenance: MaintenanceRecord[] = [
+  {
+    maintenance_id: "maint_1",
+    vehicle_id: "vehicle_1",
+    maintenance_type: "Scheduled",
+    service_date: "2026-07-20",
+    next_service_date: "2026-10-20",
+    cost: 24500,
+    remarks: "Oil change and brake inspection",
+    status: "Completed",
+  },
+];
+
+function createId(prefix: string) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const appTabs = new Set<AppTab>([
+  "dashboard",
+  "routes",
+  "drivers",
+  "vehicles",
+  "schedules",
+  "operations",
+  "reports",
+  "settings",
+]);
+
+function normalizeRole(role: string): AppRole {
+  switch (role.toUpperCase()) {
+    case "MAIN_ADMIN":
+    case "ADMIN":
+      return "MAIN_ADMIN";
+    case "DEPOT_ADMIN":
+      return "DEPOT_ADMIN";
+    case "SUPERVISOR":
+      return "SUPERVISOR";
+    case "OPERATIONAL_STAFF":
+    case "STAFF":
+    case "USER":
+      return "OPERATIONAL_STAFF";
+    default:
+      return "OPERATIONAL_STAFF";
+  }
+}
+
+function formatRoleLabel(role: AppRole) {
+  return role
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function canAccessTab(role: AppRole, tab: AppTab) {
+  return permissions[role].includes(tab);
+}
+
+function getFirstAccessibleTab(role: AppRole): AppTab {
+  for (const tab of permissions[role]) {
+    if (appTabs.has(tab as AppTab)) {
+      return tab as AppTab;
+    }
+  }
+
+  return "dashboard";
+}
+
+function normalizeUser(user: {
+  id: number;
+  full_name: string;
+  email: string;
+  username: string;
+  role: string;
+  depot_id?: number | null;
+  depotId?: number | null;
+}): AuthUser {
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    username: user.username,
+    role: normalizeRole(user.role),
+    depot_id: user.depot_id ?? user.depotId ?? null,
+  };
+}
+function App() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const storedUser =
+      window.localStorage.getItem("srmss_user") ??
+      window.sessionStorage.getItem("srmss_user");
+    if (!storedUser) {
+      return null;
+    }
+
+    try {
+      return normalizeUser(JSON.parse(storedUser));
+    } catch {
+      window.localStorage.removeItem("srmss_user");
+      window.sessionStorage.removeItem("srmss_user");
+      return null;
+    }
+  });
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+
+    const storedTheme = window.localStorage.getItem("srmss_theme");
+    return storedTheme === "dark" ? "dark" : "light";
+  });
+  const [authTab, setAuthTab] = useState<AuthTab>("login");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [regFullName, setRegFullName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regUsername, setRegUsername] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotPasswordUser, setForgotPasswordUser] = useState("");
+
+  const [activeTab, setActiveTab] = useState<AppTab>(() =>
+    currentUser ? getFirstAccessibleTab(currentUser.role) : "dashboard",
+  );
+  const [depotName, setDepotName] = useState("Colombo Central Transit Depot");
+  const [operatingHours, setOperatingHours] = useState("24/7 operations");
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
+
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routesError, setRoutesError] = useState("");
+  const [depots, setDepots] = useState<Depot[]>([]);
+  const [depotsLoading, setDepotsLoading] = useState(false);
+  const [depotsError, setDepotsError] = useState("");
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driversError, setDriversError] = useState("");
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [vehiclesError, setVehiclesError] = useState("");
+  const [users, setUsers] = useState<User[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [schedulesError, setSchedulesError] = useState("");
+  const [trips, setTrips] = useState<Trip[]>(initialTrips);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>(initialFuelLogs);
+  const [maintenance, setMaintenance] =
+    useState<MaintenanceRecord[]>(initialMaintenance);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadDrivers() {
+      setDriversLoading(true);
+      setDriversError("");
+
+      try {
+        const data = await getDrivers(currentUser.depot_id);
+
+        if (!cancelled) {
+          setDrivers(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDriversError(
+            error instanceof Error ? error.message : "Failed to load drivers.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setDriversLoading(false);
+        }
+      }
+    }
+
+    async function loadVehicles() {
+      setVehiclesLoading(true);
+      setVehiclesError("");
+
+      try {
+        const data = await getVehicles(currentUser.depot_id);
+
+        if (!cancelled) {
+          setVehicles(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setVehiclesError(
+            error instanceof Error ? error.message : "Failed to load vehicles.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setVehiclesLoading(false);
+        }
+      }
+    }
+
+    async function loadRoutes() {
+      setRoutesLoading(true);
+      setRoutesError("");
+      try {
+        const data = await getRoutes(currentUser.depot_id);
+        if (!cancelled) setRoutes(data);
+      } catch (error) {
+        if (!cancelled)
+          setRoutesError(
+            error instanceof Error ? error.message : "Failed to load routes.",
+          );
+      } finally {
+        if (!cancelled) setRoutesLoading(false);
+      }
+    }
+
+    async function loadSchedules() {
+      setSchedulesLoading(true);
+      setSchedulesError("");
+      try {
+        const data = await getSchedules(currentUser.depot_id);
+        if (!cancelled) setSchedules(data);
+      } catch (error) {
+        if (!cancelled)
+          setSchedulesError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load schedules.",
+          );
+      } finally {
+        if (!cancelled) setSchedulesLoading(false);
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const query =
+          currentUser.depot_id === null
+            ? ""
+            : `?depotId=${currentUser.depot_id}`;
+
+        const response = await fetch(`/api/users${query}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!cancelled && response.ok && data.success) {
+          setUsers(data.users ?? []);
+        }
+      } catch (error) {
+        console.error("Failed to load users:", error);
+      }
+    }
+
+    async function loadDepots() {
+      setDepotsLoading(true);
+      setDepotsError("");
+
+      try {
+        const data = await getDepots();
+        if (!cancelled) setDepots(data);
+      } catch (error) {
+        if (!cancelled)
+          setDepotsError(
+            error instanceof Error ? error.message : "Failed to load depots.",
+          );
+      } finally {
+        if (!cancelled) setDepotsLoading(false);
+      }
+    }
+
+    async function loadTrips() {
+      try {
+        const query =
+          currentUser.depot_id === null
+            ? ""
+            : `?depotId=${currentUser.depot_id}`;
+
+        const response = await fetch(`/api/operations/trips${query}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (
+          !cancelled &&
+          response.ok &&
+          data.success &&
+          Array.isArray(data.trips)
+        ) {
+          setTrips(data.trips);
+        }
+      } catch (error) {
+        console.error("Failed to load trips:", error);
+      }
+    }
+
+    async function loadFuelLogs() {
+      try {
+        const query =
+          currentUser.depot_id === null
+            ? ""
+            : `?depotId=${currentUser.depot_id}`;
+
+        const response = await fetch(`/api/operations/fuel-logs${query}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!cancelled && response.ok && data.success) {
+          setFuelLogs(data.fuelLogs ?? []);
+        }
+      } catch (error) {
+        console.error("Failed to load fuel logs:", error);
+      }
+    }
+
+    async function loadMaintenance() {
+      try {
+        const query =
+          currentUser.depot_id === null
+            ? ""
+            : `?depotId=${currentUser.depot_id}`;
+
+        const response = await fetch(`/api/operations/maintenance${query}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!cancelled && response.ok && data.success) {
+          setMaintenance(data.maintenance ?? []);
+        }
+      } catch (error) {
+        console.error("Failed to load maintenance records:", error);
+      }
+    }
+
+    loadDrivers();
+    loadVehicles();
+    loadRoutes();
+    loadSchedules();
+    loadUsers();
+    loadDepots();
+    loadTrips();
+    loadFuelLogs();
+    loadMaintenance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    window.localStorage.setItem("srmss_theme", theme);
+  }, [theme]);
+
+  const persistUser = (user: AuthUser) => {
+    const targetStorage = rememberMe
+      ? window.localStorage
+      : window.sessionStorage;
+    window.localStorage.removeItem("srmss_user");
+    window.sessionStorage.removeItem("srmss_user");
+    targetStorage.setItem("srmss_user", JSON.stringify(user));
+  };
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError("");
+    setAuthLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setLoginError(data.message ?? "Invalid username or password.");
+        return;
+      }
+
+      const user = normalizeUser(data.user);
+      setCurrentUser(user);
+      persistUser(user);
+      setActiveTab(getFirstAccessibleTab(user.role));
+      setPassword("");
+    } catch (error) {
+      console.error("Login failed:", error);
+      setLoginError("Unable to connect to the server. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+  const handleAddUser = async (user: Partial<User>) => {
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(user),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+
+      setUsers((prev) => [...prev, data.user]);
+
+      return data.user;
+    } catch (error) {
+      console.error("ADD USER ERROR:", error);
+      throw error;
+    }
+  };
+
+  const handleUpdateUser = async (userId: number, updates: Partial<User>) => {
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+
+      setUsers((prev) =>
+        prev.map((user) => (user.id === userId ? data.user : user)),
+      );
+
+      return data.user;
+    } catch (error) {
+      console.error("UPDATE USER ERROR:", error);
+      throw error;
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+
+      setUsers((prev) => prev.filter((user) => user.id !== userId));
+    } catch (error) {
+      console.error("DELETE USER ERROR:", error);
+      throw error;
+    }
+  };
+  // const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
+  //   event.preventDefault();
+  //   setLoginError("");
+  //   setAuthLoading(true);
+
+  //   try {
+  //     const response = await fetch("/api/auth/register", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({
+  //         fullName: regFullName,
+  //         email: regEmail,
+  //         username: regUsername,
+  //         password: regPassword,
+  //       }),
+  //     });
+
+  //     const data = await response.json();
+  //     if (!response.ok || !data.success) {
+  //       setLoginError(data.message ?? "Unable to create account.");
+  //       return;
+  //     }
+
+  //     const user = normalizeUser(data.user);
+  //     setCurrentUser(user);
+  //     persistUser(user);
+  //     setActiveTab(getFirstAccessibleTab(user.role));
+  //     setRegFullName("");
+  //     setRegEmail("");
+  //     setRegUsername("");
+  //     setRegPassword("");
+  //     setAuthTab("login");
+  //   } catch (error) {
+  //     console.error("Registration failed:", error);
+  //     setLoginError("Unable to connect to the server. Please try again.");
+  //   } finally {
+  //     setAuthLoading(false);
+  //   }
+  // };
+
+  // const handleResetPassword = async (
+  //   event: React.FormEvent<HTMLFormElement>,
+  // ) => {
+  //   event.preventDefault();
+  //   setShowForgotModal(false);
+  //   setLoginError(
+  //     `Reset link requested for ${forgotPasswordUser || "the selected account"}.`,
+  //   );
+  // };
+
+  const handleLogout = () => {
+    window.localStorage.removeItem("srmss_user");
+    window.sessionStorage.removeItem("srmss_user");
+    setCurrentUser(null);
+    setUsername("");
+    setPassword("");
+    setLoginError("");
+    setAuthTab("login");
+    setActiveTab("dashboard");
+  };
+
+  const updateById = <T extends object>(
+    items: T[],
+    idKey: keyof T,
+    idValue: string,
+    updates: Partial<T>,
+  ) => {
+    return items.map((item) =>
+      String(item[idKey]) === idValue ? ({ ...item, ...updates } as T) : item,
+    );
+  };
+
+  const activeDepotId = currentUser?.depot_id ?? depots[0]?.id ?? null;
+
+  const handleCreateRoute = async (route: Partial<Route>) => {
+    try {
+      const created = await createRoute(route, activeDepotId);
+      setRoutes((prev) => [created, ...prev]);
+    } catch (error) {
+      console.error("Failed to create route:", error);
+      setRoutesError(
+        error instanceof Error ? error.message : "Failed to create route.",
+      );
+    }
+  };
+
+  const handleUpdateRoute = async (
+    routeId: string,
+    updates: Partial<Route>,
+  ) => {
+    try {
+      const updated = await updateRoute(routeId, updates);
+      setRoutes((prev) =>
+        prev.map((r) => (r.route_id === updated.route_id ? updated : r)),
+      );
+    } catch (error) {
+      console.error("Failed to update route:", error);
+      setRoutesError(
+        error instanceof Error ? error.message : "Failed to update route.",
+      );
+    }
+  };
+
+  const handleDeleteRoute = async (routeId: string) => {
+    const route = routes.find((item) => item.route_id === routeId);
+    if (!route) return;
+    const confirmed = window.confirm(`Delete route "${route.route_name}"?`);
+    if (!confirmed) return;
+    try {
+      await deleteRoute(routeId);
+      setRoutes((prev) => prev.filter((item) => item.route_id !== routeId));
+    } catch (error) {
+      console.error("Failed to delete route:", error);
+      setRoutesError(
+        error instanceof Error ? error.message : "Failed to delete route.",
+      );
+    }
+  };
+
+  const handleAddDepot = async (depot: Partial<Depot>) => {
+    try {
+      const created = await createDepot(depot);
+      setDepots((prev) => [created, ...prev]);
+    } catch (error) {
+      console.error("Failed to create depot:", error);
+      setDepotsError(
+        error instanceof Error ? error.message : "Failed to create depot.",
+      );
+    }
+  };
+
+  const handleUpdateDepot = async (
+    depotId: number,
+    updates: Partial<Depot>,
+  ) => {
+    try {
+      const updated = await updateDepot(String(depotId), updates);
+      setDepots((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+    } catch (error) {
+      console.error("Failed to update depot:", error);
+      setDepotsError(
+        error instanceof Error ? error.message : "Failed to update depot.",
+      );
+    }
+  };
+
+  const handleDeleteDepot = async (depotId: number) => {
+    const depot = depots.find((item) => item.id === depotId);
+    if (!depot) return;
+    const confirmed = window.confirm(`Delete depot "${depot.name}"?`);
+    if (!confirmed) return;
+    try {
+      await deleteDepot(String(depotId));
+      setDepots((prev) => prev.filter((item) => item.id !== depotId));
+    } catch (error) {
+      console.error("Failed to delete depot:", error);
+      setDepotsError(
+        error instanceof Error ? error.message : "Failed to delete depot.",
+      );
+    }
+  };
+
+  const handleAddDriver = async (driver: Partial<Driver>) => {
+    try {
+      const created = await createDriver(driver, activeDepotId);
+
+      setDrivers((prev) => [created, ...prev]);
+    } catch (error) {
+      console.error("Failed to create driver:", error);
+
+      setDriversError(
+        error instanceof Error ? error.message : "Failed to create driver.",
+      );
+    }
+  };
+
+  const handleUpdateDriver = async (
+    driverId: string,
+    updates: Partial<Driver>,
+  ) => {
+    try {
+      const updated = await updateDriver(driverId, updates);
+
+      setDrivers((prev) =>
+        prev.map((driver) =>
+          driver.driver_id === updated.driver_id ? updated : driver,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update driver:", error);
+
+      setDriversError(
+        error instanceof Error ? error.message : "Failed to update driver.",
+      );
+    }
+  };
+
+  const handleDeleteDriver = async (driverId: string) => {
+    const driver = drivers.find((item) => item.driver_id === driverId);
+
+    if (!driver) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete driver "${driver.name}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteDriver(driverId);
+
+      setDrivers((prev) => prev.filter((item) => item.driver_id !== driverId));
+    } catch (error) {
+      console.error("Failed to delete driver:", error);
+
+      setDriversError(
+        error instanceof Error ? error.message : "Failed to delete driver.",
+      );
+    }
+  };
+
+  const handleAddVehicle = async (vehicle: Partial<Vehicle>) => {
+    try {
+      const created = await createVehicle(vehicle, activeDepotId);
+
+      setVehicles((prev) => [created, ...prev]);
+    } catch (error) {
+      console.error("Failed to create vehicle:", error);
+
+      setVehiclesError(
+        error instanceof Error ? error.message : "Failed to create vehicle.",
+      );
+    }
+  };
+
+  const handleUpdateVehicle = async (
+    vehicleId: string,
+    updates: Partial<Vehicle>,
+  ) => {
+    try {
+      const updated = await updateVehicle(vehicleId, updates);
+
+      setVehicles((prev) =>
+        prev.map((vehicle) =>
+          vehicle.vehicle_id === updated.vehicle_id ? updated : vehicle,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update vehicle:", error);
+
+      setVehiclesError(
+        error instanceof Error ? error.message : "Failed to update vehicle.",
+      );
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string) => {
+    const vehicle = vehicles.find((item) => item.vehicle_id === vehicleId);
+
+    if (!vehicle) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete vehicle "${vehicle.registration_number}"?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteVehicle(vehicleId);
+
+      setVehicles((prev) =>
+        prev.filter((item) => item.vehicle_id !== vehicleId),
+      );
+    } catch (error) {
+      console.error("Failed to delete vehicle:", error);
+
+      setVehiclesError(
+        error instanceof Error ? error.message : "Failed to delete vehicle.",
+      );
+    }
+  };
+
+  const handleCreateSchedule = async (schedule: Partial<Schedule>) => {
+    try {
+      const created = await createSchedule(schedule, activeDepotId);
+      setSchedules((prev) => [created, ...prev]);
+    } catch (error) {
+      console.error("Failed to create schedule:", error);
+      setSchedulesError(
+        error instanceof Error ? error.message : "Failed to create schedule.",
+      );
+    }
+  };
+
+  const handleUpdateSchedule = async (
+    scheduleId: string,
+    updates: Partial<Schedule>,
+  ) => {
+    try {
+      const updated = await updateSchedule(scheduleId, updates);
+      setSchedules((prev) =>
+        prev.map((s) => (s.schedule_id === updated.schedule_id ? updated : s)),
+      );
+    } catch (error) {
+      console.error("Failed to update schedule:", error);
+      setSchedulesError(
+        error instanceof Error ? error.message : "Failed to update schedule.",
+      );
+    }
+  };
+
+  const handleDeleteSchedule = async (scheduleId: string) => {
+    const schedule = schedules.find((item) => item.schedule_id === scheduleId);
+    if (!schedule) return;
+    const confirmed = window.confirm(`Delete this schedule?`);
+    if (!confirmed) return;
+    try {
+      await deleteSchedule(scheduleId);
+      setSchedules((prev) =>
+        prev.filter((item) => item.schedule_id !== scheduleId),
+      );
+    } catch (error) {
+      console.error("Failed to delete schedule:", error);
+      setSchedulesError(
+        error instanceof Error ? error.message : "Failed to delete schedule.",
+      );
+    }
+  };
+
+  const handleAIResolve = async (prompt: string) => {
+    return `AI suggestion for "${prompt}": assign the nearest available vehicle and driver, then recheck the schedule window.`;
+  };
+
+  const handleStartTrip = async (tripId: string) => {
+    try {
+      const existingTrip = trips.find((trip) => trip.trip_id === tripId);
+      const startTime = existingTrip?.start_time || new Date().toISOString();
+      const response = await fetch(`/api/operations/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ACTIVE", start_time: startTime }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to start trip.");
+      }
+
+      setTrips((prev) =>
+        prev.map((trip) => (trip.trip_id === tripId ? data.trip : trip)),
+      );
+    } catch (error) {
+      console.error("Failed to start trip:", error);
+    }
+  };
+
+  const handleEndTrip = async (
+    tripId: string,
+    status: "Completed" | "Cancelled",
+    remarks?: string,
+  ) => {
+    try {
+      const response = await fetch(`/api/operations/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: status.toUpperCase(),
+          end_time: new Date().toISOString(),
+          remarks,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to complete trip.");
+      }
+
+      setTrips((prev) =>
+        prev.map((trip) => (trip.trip_id === tripId ? data.trip : trip)),
+      );
+    } catch (error) {
+      console.error("Failed to end trip:", error);
+    }
+  };
+
+  const handleUpdateTripStatus = async (
+    tripId: string,
+    status: Trip["status"],
+  ) => {
+    try {
+      const response = await fetch(`/api/operations/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: status.toUpperCase() }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to update trip status.");
+      }
+
+      setTrips((prev) =>
+        prev.map((trip) => (trip.trip_id === tripId ? data.trip : trip)),
+      );
+    } catch (error) {
+      console.error("Failed to update trip status:", error);
+    }
+  };
+
+  const handleAddFuelLog = async (log: Partial<FuelLog>) => {
+    try {
+      const response = await fetch("/api/operations/fuel-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...log,
+          depotId: activeDepotId ?? undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to add fuel log.");
+      }
+
+      setFuelLogs((prev) => [data.fuelLog, ...prev]);
+    } catch (error) {
+      console.error("Failed to add fuel log:", error);
+    }
+  };
+
+  const handleAddMaintenance = async (record: Partial<MaintenanceRecord>) => {
+    try {
+      const response = await fetch("/api/operations/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...record,
+          depotId: activeDepotId ?? undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to add maintenance record.");
+      }
+
+      setMaintenance((prev) => [data.maintenance, ...prev]);
+    } catch (error) {
+      console.error("Failed to add maintenance record:", error);
+    }
+  };
+
+  const handleUpdateMaintenanceStatus = async (
+    recordId: string,
+    status: MaintenanceRecord["status"],
+  ) => {
+    try {
+      const response = await fetch(`/api/operations/maintenance/${recordId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message ?? "Failed to update maintenance status.");
+      }
+
+      setMaintenance((prev) =>
+        prev.map((record) =>
+          record.maintenance_id === recordId ? { ...record, status } : record,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update maintenance status:", error);
+    }
+  };
+
+  const handleSaveSettings = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setSaveSuccessMsg("Depot settings saved successfully.");
+    window.setTimeout(() => setSaveSuccessMsg(""), 2500);
+  };
+
+  if (!mounted) {
+    return null;
+  }
+
+  if (!currentUser) {
+    return (
+      <div
+        className={`relative min-h-screen w-full bg-no-repeat bg-center transition-colors duration-300 ${
+          theme === "dark"
+            ? "bg-slate-100 text-slate-100"
+            : "bg-slate-100 text-slate-900"
+        }`}
+        style={{
+          backgroundImage: `url('https://images.pexels.com/photos/3230239/pexels-photo-3230239.jpeg')`,
+          backgroundSize: "100% auto", // Fits width 100%, lets height adjust naturally
+        }}
+      >
+        {/* Background Dark Overlay for High-Contrast & Legibility */}
+        <div className="absolute inset-0  backdrop-blur-xs" />
+
+        {/* Theme Toggle */}
+        <div className="absolute right-6 top-6 z-30"></div>
+
+        {/* Main Container */}
+        <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center px-4 py-12 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-12">
+          {/* Left Column: Brand Hero Card */}
+          <div className="relative overflow-hidden rounded-[2.5rem] bg-slate-950/60 p-10 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-xl lg:p-12">
+            {/* Subtle background glow decorative elements */}
+            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
+
+            <div className="relative z-10">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-20 w-12 items-center justify-center rounded-2xl text-white  ">
+                  <Bus className="h-10 w-10 text-cyan-400" />
+                </div>
+                <div>
+                  <div className="text-xl font-black tracking-[0.25em] text-white">
+                    SRMSS
+                  </div>
+                  <div className="text-[40px] font-semibold uppercase tracking-[0.3em] text-cyan-400/90">
+                    Transit Control
+                  </div>
+                </div>
+              </div>
+
+              <h1 className="mt-12 max-w-lg text-4xl font-extrabold tracking-tight text-white lg:text-5xl lg:leading-[1.15]">
+                Smart route operations & fleet control.
+              </h1>
+
+              <p className="mt-6 max-w-md text-sm leading-relaxed text-slate-300/90">
+                Sign in to manage routes, vehicles, drivers, schedules, dispatch
+                logs, and audit reporting from a single centralized dashboard.
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column: Authentication Card (Guaranteed Solid Background) */}
+          <div
+            className="custom-auth-card rounded-2xl border border-slate-700/80 p-8 shadow-2xl lg:p-10"
+            style={{ backgroundColor: "#202020", opacity: 1 }}
+          >
+            <div className="mb-6 flex border-b border-slate-800 pb-2">
+              <button
+                type="button"
+                onClick={() => setAuthTab("login")}
+                className={`relative pb-3 text-xs font-bold tracking-wide transition-colors ${
+                  authTab === "login"
+                    ? "text-cyan-400"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Sign In
+                {authTab === "login" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-cyan-400" />
+                )}
+              </button>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-white">
+                {authTab === "login" ? "Welcome back" : "Register account"}
+              </h2>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                {authTab === "login"
+                  ? "Access the depot management portal."
+                  : "Create a passenger or staff account."}
+              </p>
+            </div>
+
+            {/* Error Banner */}
+            {loginError && (
+              <div
+                className="mt-5 flex items-start gap-3 rounded-2xl border border-red-500/30 p-3.5 text-xs text-red-300"
+                style={{ backgroundColor: "#450a0a" }}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                <span className="leading-relaxed">{loginError}</span>
+              </div>
+            )}
+
+            {/* Login Form */}
+            {authTab === "login" && (
+              <form onSubmit={handleLogin} className="mt-6 space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <UserCheck className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="Username"
+                      className="w-full rounded-2xl border border-slate-800 py-3 pl-10 pr-4 text-sm font-medium text-white outline-none transition-all placeholder:text-slate-500 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      style={{ backgroundColor: "#020617" }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      Password
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <Unlock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full rounded-2xl border border-slate-800 py-3 pl-10 pr-4 text-sm font-medium text-white outline-none transition-all placeholder:text-slate-500 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      style={{ backgroundColor: "#020617" }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex cursor-pointer select-none items-center gap-2.5 text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded-md border-slate-700 text-cyan-500 focus:ring-cyan-500/20"
+                      style={{ backgroundColor: "#020617" }}
+                    />
+                    Keep me signed in
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl  from-blue-600 to-cyan-500 py-3.5 text-sm font-bold text-white shadow-lg 0 hover:bg-[#6b8e13]"
+                  style={{
+                    background: "#7da216",
+                    color: "white",
+                  }}
+                >
+                  {authLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
+                  )}
+                  <span>Access Portal</span>
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-screen flex-col bg-[#0b0f12] text-[#ede9e3]">
+      <header className="flex h-16 items-center justify-between gap-4 border-b border-[#27323a] bg-[#141a1f]/90 px-6 shadow-sm backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6b8f3c]/20 border border-[#6b8f3c]/30 text-[#8bb552]">
+            <Bus className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xs font-black uppercase tracking-widest text-[#ede9e3]">
+              SRMSS
+            </h1>
+            <p className="text-[10px] text-[#8a96a0]">{depotName}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden text-right sm:block">
+            <div className="text-xs font-bold text-[#ede9e3]">
+              {currentUser.full_name}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-[#c49a5c]">
+              {formatRoleLabel(currentUser.role)} Account
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-[#27323a] bg-[#1a2228] p-2 text-[#8a96a0] hover:text-[#b85454] transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 flex-col md:flex-row">
+        <aside className="w-full border-b border-[#27323a] bg-[#141a1f]/60 p-4 md:w-64 md:border-b-0 md:border-r backdrop-blur-md">
+          <div className="space-y-1 text-xs font-semibold">
+            {canAccessTab(currentUser.role, "dashboard") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("dashboard")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "dashboard" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+              >
+                <LayoutDashboard className="h-4 w-4" /> Dashboard
+              </button>
+            )}
+            {canAccessTab(currentUser.role, "routes") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("routes")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "routes" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+              >
+                <Calendar className="h-4 w-4" /> Routes
+              </button>
+            )}
+            {canAccessTab(currentUser.role, "depots") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("depots")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${
+                  activeTab === "depots"
+                    ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold"
+                    : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"
+                }`}
+              >
+                <Building className="h-4 w-4" />
+                Depot Management
+              </button>
+            )}
+
+            {canAccessTab(currentUser.role, "users") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("users")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${
+                  activeTab === "users"
+                    ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold"
+                    : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                User Management
+              </button>
+            )}
+            {canAccessTab(currentUser.role, "drivers") && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("drivers")}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "drivers" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+                >
+                  <Users className="h-4 w-4" /> Drivers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("vehicles")}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "vehicles" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+                >
+                  <Bus className="h-4 w-4" /> Vehicles
+                </button>
+              </>
+            )}
+            {canAccessTab(currentUser.role, "schedules") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("schedules")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "schedules" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+              >
+                <Calendar className="h-4 w-4" /> Schedules
+              </button>
+            )}
+            {canAccessTab(currentUser.role, "operations") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("operations")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "operations" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+              >
+                <Zap className="h-4 w-4" /> Operations
+              </button>
+            )}
+            {canAccessTab(currentUser.role, "reports") && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("reports")}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition-all ${activeTab === "reports" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+              >
+                <FileText className="h-4 w-4" /> Reports
+              </button>
+            )}
+          </div>
+
+          {canAccessTab(currentUser.role, "settings") && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`mt-4 flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-xs transition-all ${activeTab === "settings" ? "bg-[#6b8f3c]/20 text-[#8bb552] border border-[#6b8f3c]/30 font-bold" : "text-[#8a96a0] hover:bg-[#1a2228] hover:text-[#ede9e3]"}`}
+            >
+              <Cog className="h-4 w-4" /> Settings
+            </button>
+          )}
+        </aside>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#0b0f12]">
+          {activeTab === "dashboard" && (
+            <Dashboard
+              routes={routes}
+              drivers={drivers}
+              vehicles={vehicles}
+              schedules={schedules}
+              fuelLogs={fuelLogs}
+              trips={trips}
+              onSetTab={setActiveTab}
+            />
+          )}
+          {activeTab === "depots" && (
+            <DepotManagement
+              depots={depots}
+              onAddDepot={handleAddDepot}
+              onUpdateDepot={handleUpdateDepot}
+              onDeleteDepot={handleDeleteDepot}
+              userRole={currentUser.role}
+            />
+          )}
+          {activeTab === "users" && (
+            <UserManagement
+              users={users}
+              depots={depots}
+              onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
+              userRole={currentUser.role}
+            />
+          )}
+          {activeTab === "routes" && (
+            <RoutesModule
+              routes={routes}
+              onCreateRoute={handleCreateRoute}
+              onUpdateRoute={handleUpdateRoute}
+              onDeleteRoute={handleDeleteRoute}
+              userRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === "drivers" && (
+            <DriversModule
+              drivers={drivers}
+              onAddDriver={handleAddDriver}
+              onUpdateDriver={handleUpdateDriver}
+              onDeleteDriver={handleDeleteDriver}
+              userRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === "vehicles" && (
+            <VehiclesModule
+              vehicles={vehicles}
+              onAddVehicle={handleAddVehicle}
+              onUpdateVehicle={handleUpdateVehicle}
+              onDeleteVehicle={handleDeleteVehicle}
+              userRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === "schedules" && (
+            <SchedulesModule
+              schedules={schedules}
+              drivers={drivers}
+              vehicles={vehicles}
+              routes={routes}
+              onCreateSchedule={handleCreateSchedule}
+              onUpdateSchedule={handleUpdateSchedule}
+              onDeleteSchedule={handleDeleteSchedule}
+              onAIResolve={handleAIResolve}
+              userRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === "operations" && (
+            <OperationsModules
+              trips={trips}
+              fuelLogs={fuelLogs}
+              maintenance={maintenance}
+              vehicles={vehicles}
+              schedules={schedules}
+              routes={routes}
+              onStartTrip={handleStartTrip}
+              onEndTrip={handleEndTrip}
+              onUpdateTripStatus={handleUpdateTripStatus}
+              onAddFuelLog={handleAddFuelLog}
+              onAddMaintenance={handleAddMaintenance}
+              onUpdateMaintenanceStatus={handleUpdateMaintenanceStatus}
+              userRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === "reports" && (
+            <ReportsModule
+              routes={routes}
+              drivers={drivers}
+              vehicles={vehicles}
+              fuelLogs={fuelLogs}
+              maintenance={maintenance}
+              schedules={schedules}
+            />
+          )}
+
+          {activeTab === "settings" && (
+            <div className="mx-auto max-w-2xl space-y-6 rounded-2xl border border-[#27323a] bg-[#141a1f] p-6 shadow-md">
+              <div>
+                <h3 className="text-sm font-bold text-[#ede9e3]">
+                  System Parameter Configurations
+                </h3>
+                <p className="text-xs text-[#8a96a0]">
+                  Calibrate depot rules, terminal names, and backup intervals.
+                </p>
+              </div>
+
+              {saveSuccessMsg && (
+                <div className="flex items-center gap-2 rounded-xl border border-[#5fa87a]/30 bg-[#5fa87a]/10 p-3 text-xs text-[#5fa87a]">
+                  <span>{saveSuccessMsg}</span>
+                </div>
+              )}
+
+              <form
+                onSubmit={handleSaveSettings}
+                className="space-y-4 text-xs font-semibold"
+              >
+                <div className="space-y-1.5">
+                  <label className="text-[#8a96a0]">
+                    Official Depot Terminal Name
+                  </label>
+                  <input
+                    value={depotName}
+                    onChange={(e) => setDepotName(e.target.value)}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[#8a96a0]">Operating hours</label>
+                  <input
+                    value={operatingHours}
+                    onChange={(e) => setOperatingHours(e.target.value)}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 border-t border-[#27323a] pt-4">
+                  <button type="submit" className="btn-primary">
+                    Save Configurations
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default App;
